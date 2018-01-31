@@ -59,13 +59,7 @@
             if (typeof load_more_data === 'undefined'){
                 function load_more_data(json) {
                     // Get the list of new table rows
-                    var obj = null;
-                    for(var x in json) {
-                        obj = json[x];
-                        if (obj.length > 0){
-                            break;
-                        }
-                    }
+                    var obj = json["{{ context_ajax_name }}"];
 
                     // Loop through new table rows
                     $("#{{ table.table_id }}").append(

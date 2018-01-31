@@ -261,6 +261,8 @@ class AjaxableResponseMixin(object):
         """Returns a list of ajax context names to return in json."""
         if self.context_ajax_name:
             return self.context_ajax_name
+        elif isinstance(self, PaginatorMixin):
+            return self.get_context_paginated_name()
         return None
 
     def _get_context_ajax_names(self):
@@ -307,6 +309,12 @@ class AjaxableResponseMixin(object):
             return JsonResponse(data, status=200)
         else:
             return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["has_ajax_support"] = True
+        context["context_ajax_name"] = self.get_context_ajax_name()
+        return context
     # ========== END GET Method ==========
 
     # ========== POST Method ==========

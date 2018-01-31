@@ -32,7 +32,7 @@
 </table>
 
 
-{% if use_load_more %}
+{% if use_load_more and has_ajax_support %}
     {% render_load_more %}
 {% elif use_pagination %}
     {% render_pagination %}
