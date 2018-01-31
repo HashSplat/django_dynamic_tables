@@ -8,6 +8,9 @@ from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.list import MultipleObjectMixin
 
 
+__all__ = ["SortableTableMixin", "PaginatorMixin", "AjaxableResponseMixin"]
+
+
 def get_context_object_name(view):
     """Return the context_object_name for a view or None."""
     try:
@@ -74,13 +77,19 @@ class SortableTableMixin(object):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.table:  # Support for django-tables2. This doesn't work with pagination thought :/
-            context[self.context_table_name] = self.table(context[get_context_object_name(self)],
-                                                          ordering=self.get_order_names())
+            if isinstance(self, PaginatorMixin):
+                context_object_name = self.get_context_paginated_name()
+            else:
+                context_object_name = get_context_object_name(self)
+
+            table = self.table(context[context_object_name], ordering=self.get_order_names())
+            context[self.context_table_name] = table
+
         return context
 
 
 class PaginatorMixin(object):
-    context_paginated_name = "object_list"
+    context_paginated_name = None
     allow_empty = True
     paginate_by = None
     paginate_orphans = 0
@@ -96,6 +105,7 @@ class PaginatorMixin(object):
                 queryset = queryset.order_by(*self.get_ordering())
             except:
                 pass
+
         paginator = self.get_paginator(
             queryset, page_size, orphans=self.get_paginate_orphans(),
             allow_empty_first_page=self.get_allow_empty())
@@ -145,7 +155,7 @@ class PaginatorMixin(object):
         return self.allow_empty
 
     def get_context_paginated_name(self):
-        return self.context_paginated_name
+        return self.context_paginated_name or get_context_object_name(self)
 
     def add_paginator(self, context, queryset, context_object_name=None, page_size=None):
         if context_object_name is None:
@@ -164,6 +174,24 @@ class PaginatorMixin(object):
         context["is_paginated"] = is_paginated
         context[context_object_name] = queryset
 
+        return context
+
+    def paginate(self, context):
+        context_object_name = get_context_object_name(self)
+        context_paginated_name = self.get_context_paginated_name()
+        qs = context[context_object_name]
+        if context_object_name != context_paginated_name and hasattr(qs, context_paginated_name):
+            try:
+                qs = getattr(qs, context_paginated_name)
+                qs = qs.all()
+            except:
+                pass
+        self.add_paginator(context, qs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.paginate_by:
+            self.paginate(context)
         return context
 
 
