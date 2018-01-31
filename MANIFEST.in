@@ -1,0 +1,6 @@
+recursive-include dynamic_tables/static *
+recursive-include dynamic_tables/templates *
+recursive-include dynamic_tables/templatetags *
+
+global-exclude __pycache__
+global-exclude __pycache__/*

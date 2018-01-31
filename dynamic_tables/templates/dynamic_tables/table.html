@@ -1,0 +1,39 @@
+{% load dynamic_tables %}
+
+
+<table id="{{ table.table_id }}" class="{{ table.table_class_names }}">
+    <thead>
+        <tr>
+    {% for col in table.columns %}
+        {% if table.sortable and col.sort %}
+            {% if col.sort in table.ordering %}
+                <th><a href="?sort=-{{ col.sort }}">{{ col.display_name }} ▴</a></th>
+            {% elif "-"|add:col.sort in table.ordering %}
+                <th><a href="?sort={{ col.sort }}">{{ col.display_name }} ▾</a></th>
+            {% else %}
+                <th><a href="?sort={{ col.sort }}">{{ col.display_name }}</a></th>
+            {% endif %}
+        {% else %}
+            <th>{{ col.display_name }}</th>
+        {% endif %}
+    {% endfor %}
+        </tr>
+    </thead>
+
+    <tbody>
+    {% for row in table.queryset %}
+        <tr class="{{ table.row_class_names }}">
+        {% for col in table.columns %}
+            <td>{% render_table_cell table row col %}</td>
+        {% endfor %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+
+{% if use_load_more %}
+    {% render_load_more %}
+{% elif use_pagination %}
+    {% render_pagination %}
+{% endif %}

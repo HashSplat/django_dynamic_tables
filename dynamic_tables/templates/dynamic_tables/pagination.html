@@ -1,0 +1,10 @@
+{% if is_paginated %}
+    <ul class="pagination center">
+        {% for pg in page_obj_pages %}
+            <li class="{{ pg.class }}" style="{{ pg.style }}"><a
+                    {% if pg.url %}href="{{ pg.url }}"{% endif %}
+                    {% if pg.tooltip %}class="tooltipped" data-tooltip="{{ pg.tooltip }}"{% endif %}
+            >{% if pg.icon %}<i class="material-icons">{{ pg.icon }}</i>{% else %}{{ pg.number }}{% endif %}</a></li>
+        {% endfor %}
+    </ul>
+{% endif %}

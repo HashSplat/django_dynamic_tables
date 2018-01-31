@@ -1,0 +1,102 @@
+{% load dynamic_tables %}
+
+{% if is_paginated %}
+    <div class="center" style="">
+        <a id="load_more_btn" class="btn-flat waves-effect">Load More</a>
+    </div>
+
+
+    <script>
+        // Function to create a table row
+        function create_table_row(item){
+            var tds = '';
+            var td = '';
+
+{% for col in table.columns %}
+    {% if col.tag %}
+            // Parse the tag text
+            td = "<td>{{ col.safe_tag }}</td>";
+
+            // replace item.name with actual item properties
+            for(var val in item) {
+                td = td.replace("item."+val, item[val]);
+            }
+            // Replace item and cell values
+            td = td.replace("item", item["str"]).replace("cell", item['{{ col.name }}']);
+            tds += td; // Add to items in the row
+            console.log(td);
+
+    {% else %}
+            if(typeof item['{{ col.name }}'] !== "undefined" ){
+                td = "<td>" + item['{{ col.name }}'] + "</td>";
+            } else{
+                td = "<td></td>";
+            }
+
+            tds += td; // Add to items in the row
+
+    {% endif %}
+{% endfor %}
+            return '<tr class="{{ table.row_class_names }}">' + tds + '</tr>';
+        }
+
+
+        $(document).ready(function() {
+{% if page_sorting %}
+            var base_url = "?sort={{ page_sorting }}&page=";
+{% else %}
+            var base_url = "?page=";
+{% endif %}
+            var page = {{ page_obj.number }} + 1;
+            var total = {% if page_obj.paginator.num_pages %}{{ page_obj.paginator.num_pages }}{% else %}0{% endif %};
+
+            // Load More Data Error Function (This can be overridden
+            if (typeof load_more_data_error === 'undefined'){
+                function load_more_data_error(xhr, status, errorThrown) {
+                    console.log(xhr, status, errorThrown);
+                }
+            }
+
+            // Load More Data Success Function (This can be overridden)
+            if (typeof load_more_data === 'undefined'){
+                function load_more_data(json) {
+                    // Get the list of new table rows
+                    var obj = null;
+                    for(var x in json) {
+                        obj = json[x];
+                        if (obj.length > 0){
+                            break;
+                        }
+                    }
+
+                    // Loop through new table rows
+                    $("#{{ table.table_id }}").append(
+                        $.map(obj, function(name, index){
+                            return create_table_row(obj[index]);
+                        })
+                    );
+                }
+            }
+
+
+            $("#load_more_btn").on("click", function(e){
+                e.preventDefault();
+
+                $.ajax({
+                    type: "get",
+                    url: base_url + page.toString(),
+                    dataType: "json",
+                    success: function (json) {
+                        load_more_data(json);
+
+                        page = page + 1;
+                        if(page >= total){
+                            $("#load_more_btn")[0].style.display = "none";
+                        }
+                    },
+                    error: load_more_data_error
+                });
+            })
+        });
+    </script>
+{% endif %}
