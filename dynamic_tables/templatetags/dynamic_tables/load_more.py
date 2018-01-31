@@ -20,3 +20,9 @@ def render_load_more(context):
         pass
 
     return context
+
+
+@register.inclusion_tag("dynamic_tables/load_more_btn.html", takes_context=True)
+def render_load_more_btn(context):
+    """Render a load more data button (only render the button)."""
+    return context
