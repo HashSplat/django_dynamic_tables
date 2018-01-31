@@ -129,8 +129,8 @@ class OtherView(AjaxableResponseMixin, PaginatorMixin, SortableTableMixin, gener
     @classmethod
     def get_json_data(cls, data_obj, obj_json):
         # Need to add some extra data for json to work properly.
-        # Fields are loaded automatically this is used for functions and attributes that are int the table but 
-        # are not fields.
+        # Fields are loaded automatically this is used for functions and attributes that are in the table
+        # but are not fields.
         obj_json["get_thing1_alt"] = str(data_obj.get_thing1_alt())
 
     # Does below automatically by context_object_name and context_paginated_name being different
