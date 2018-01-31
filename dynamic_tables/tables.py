@@ -39,17 +39,17 @@ class Column(dict):
             li = name
             name = None
 
-        if display_name is None:
-            display_name = str(name).replace("_", " ").title()
-        if sort is None:
-            sort = str(name)
-
         super().__init__(name=name, display_name=display_name, sort=sort, tag=tag)
 
         if d is not None:
             self.from_dict(d)
         elif li is not None:
             self.from_list(li)
+
+        if self["display_name"] is None:
+            self["display_name"] = str(self['name']).replace("_", " ").title()
+        if self['sort'] is None:
+            self['sort'] = str(self['name'])
 
     def from_dict(self, d):
         """Set the values from a dictionary"""
