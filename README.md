@@ -2,7 +2,7 @@
 A quick way to add sortable paginated tables with ajax support.
 
 ## Basic Setup
-###Include in INSTALLED_APPS
+### Include in INSTALLED_APPS
 ```python
 INSTALLED_APPS = [
     ...
@@ -56,7 +56,7 @@ class MyView(AjaxableResponseMixin, SortableTableMixin, generic.ListView):
     model = MyModel
     table = MyTable
     context_object_name = "obj"
-    template_name = 'myapp/myapp_list.html'  # Default: <app_label>/<model_name>_list.html
+    template_name = 'myapp/myapp_list.html'
     paginate_by = 10  # normal generic.ListView pagination
 ```
 
@@ -101,7 +101,7 @@ class OtherTable(Table):
         model = Other
         fields = [Column("thing1", "Thing 1", "thing1",
                          tag="<a href='{{ item.get_thing1_alt }}'>{{ cell }}</a>"),
-                  "thing2",
+                  Column("thing2", sort="mymodel__name"),  # Warning when sorting from a foreignkey specify the field or the ID is used for sorting
                   "thing3",
                   ]
 ```
@@ -118,12 +118,13 @@ from .table import MyTable, OtherTable
 
 class OtherView(AjaxableResponseMixin, PaginatorMixin, SortableTableMixin, generic.DetailView):
     model = MyModel
-    table = OtherTable
+    table = OtherTable  # Use the OtherTable because the Table will be the Other reverse ForeignKey queryset
     context_object_name = "obj"
-    template_name = 'myapp/myapp_detail.html'  # Default: <app_label>/<model_name>_list.html
+    template_name = 'myapp/myapp_detail.html'
     paginate_by = 10  # uses PaginatorMixin
-    context_paginated_name = "other_set"
-    context_ajax_name = "other_set"
+    context_paginated_name = "other_set"  # SortableTableMixin will use this queryset because of PaginatorMixin
+    context_ajax_name = "other_set"  # The name to access the json name for the ajax json respons
+    # (If this is not given it defaults to the context_paginated_name) 
 
     @classmethod
     def get_json_data(cls, data_obj, obj_json):
@@ -132,6 +133,7 @@ class OtherView(AjaxableResponseMixin, PaginatorMixin, SortableTableMixin, gener
         # are not fields.
         obj_json["get_thing1_alt"] = str(data_obj.get_thing1_alt())
 
-    def paginate(self, context):
-        self.add_paginator(context, context["obj"].other_set.all())
+    # Does below automatically by context_object_name and context_paginated_name being different
+    # def paginate(self, context):
+    #     self.add_paginator(context, context["obj"].other_set.all())
 ```
