@@ -8,7 +8,7 @@ from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.list import MultipleObjectMixin
 
 
-__all__ = ["SortableTableMixin", "PaginatorMixin", "AjaxableResponseMixin"]
+__all__ = ["SortableTableMixin", "PaginatorMixin", "AjaxableResponseMixin", "AjaxTableMixin"]
 
 
 def get_context_object_name(view):
@@ -32,7 +32,45 @@ def get_context_object_name(view):
         pass
 
 
-class SortableTableMixin(object):
+class ViewMixin(object):
+    def get_content_object(self, context):
+        context_object_name = get_context_object_name(self)
+        if isinstance(self, PaginatorMixin):
+            context_content_name = self.get_context_paginated_name()
+        elif isinstance(self, AjaxableResponseMixin):
+            context_content_name = self.get_context_ajax_name()
+        else:
+            context_content_name = context_object_name
+
+        # Return the content that may be manipulated
+        if context_content_name in context:
+            return context[context_content_name]
+
+        # Get the content that may be manipulated
+        qs = context[context_object_name]
+        if context_object_name != context_content_name and hasattr(qs, context_content_name):
+            try:
+                qs = getattr(qs, context_content_name)
+                qs = qs.all()
+            except:
+                pass
+            context[context_content_name] = qs
+
+        return qs
+
+    def set_content_object(self, context, qs):
+        context_object_name = get_context_object_name(self)
+        if isinstance(self, PaginatorMixin):
+            context_content_name = self.get_context_paginated_name()
+        elif isinstance(self, AjaxableResponseMixin):
+            context_content_name = self.get_context_ajax_name()
+        else:
+            context_content_name = context_object_name
+
+        context[context_content_name] = qs
+
+
+class SortableTableMixin(ViewMixin):
     """Works with a list view."""
     table = None
     context_table_name = "table"
@@ -52,7 +90,16 @@ class SortableTableMixin(object):
             return sort_name
 
         # Check if some sort of text field
-        field = model._meta.get_field(col)
+        try:
+            sub_col = col
+            while "__" in sub_col:
+                sub_name, sub_col = sub_col.split("__", 1)
+                sub = model._meta.get_field(sub_name)
+                model = sub.target_field.model
+            field = model._meta.get_field(sub_col)
+        except:
+            return sort_name
+
         if isinstance(field, (CharField, TextField, EmailField, FileField, FilePathField,
                               SlugField, URLField, UUIDField, GenericIPAddressField)):
             if negative:
@@ -66,7 +113,10 @@ class SortableTableMixin(object):
                 # Note Char ordering is affected by capitalization. Lower removes that
                 ordering = tuple(self._get_special_ordering(sort) for sort in self.request.GET.get("sort").split(","))
                 return ordering
-        return super().get_ordering()
+        try:
+            return super().get_ordering()
+        except AttributeError:
+            return None
 
     def get_order_names(self):
         if self.request.method == "GET":
@@ -74,21 +124,29 @@ class SortableTableMixin(object):
                 return tuple(self.request.GET.get("sort").split(","))
         return tuple()
 
+    def set_content_object(self, context, qs):
+        super().set_content_object(context, qs)
+        if self.context_table_name in context:
+            context[self.context_table_name].queryset = qs
+
+    def sort_table(self, context):
+        qs = self.get_content_object(context)
+        if not isinstance(self, MultipleObjectMixin):  # Had default ordering
+            ordering = self.get_ordering()
+            if ordering is not None:
+                qs = qs.order_by(*ordering)
+        table = self.table(qs, ordering=self.get_order_names())
+        context[self.context_table_name] = table
+        self.set_content_object(context, qs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.table:  # Support for django-tables2. This doesn't work with pagination thought :/
-            if isinstance(self, PaginatorMixin):
-                context_object_name = self.get_context_paginated_name()
-            else:
-                context_object_name = get_context_object_name(self)
-
-            table = self.table(context[context_object_name], ordering=self.get_order_names())
-            context[self.context_table_name] = table
-
+            self.sort_table(context)
         return context
 
 
-class PaginatorMixin(object):
+class PaginatorMixin(ViewMixin):
     context_paginated_name = None
     allow_empty = True
     paginate_by = None
@@ -99,13 +157,6 @@ class PaginatorMixin(object):
 
     def paginate_queryset(self, queryset, page_size):
         """Paginate the queryset, if needed."""
-        # Check if this is a sortable table that is being paginated
-        if isinstance(self, SortableTableMixin):
-            try:
-                queryset = queryset.order_by(*self.get_ordering())
-            except:
-                pass
-
         paginator = self.get_paginator(
             queryset, page_size, orphans=self.get_paginate_orphans(),
             allow_empty_first_page=self.get_allow_empty())
@@ -117,12 +168,12 @@ class PaginatorMixin(object):
             if page == 'last':
                 page_number = paginator.num_pages
             else:
-                raise Http404(_("Page is not 'last', nor can it be converted to an int."))
+                raise Http404("Page is not 'last', nor can it be converted to an int.")
         try:
             page = paginator.page(page_number)
             return (paginator, page, page.object_list, page.has_other_pages())
         except InvalidPage as e:
-            raise Http404(_('Invalid page (%(page_number)s): %(message)s') % {
+            raise Http404(('Invalid page (%(page_number)s): %(message)s') % {
                 'page_number': page_number,
                 'message': str(e)
             })
@@ -160,6 +211,7 @@ class PaginatorMixin(object):
     def add_paginator(self, context, queryset, context_object_name=None, page_size=None):
         if context_object_name is None:
             context_object_name = self.get_context_paginated_name()
+        context_paginated_name = context_object_name
         if page_size is None:
             page_size = self.get_paginate_by(queryset)
 
@@ -172,30 +224,23 @@ class PaginatorMixin(object):
         context["paginator"] = paginator
         context["page_obj"] = page
         context["is_paginated"] = is_paginated
-        context[context_object_name] = queryset
+        context[context_paginated_name] = queryset
+        self.set_content_object(context, queryset)
 
         return context
 
     def paginate(self, context):
-        context_object_name = get_context_object_name(self)
-        context_paginated_name = self.get_context_paginated_name()
-        qs = context[context_object_name]
-        if context_object_name != context_paginated_name and hasattr(qs, context_paginated_name):
-            try:
-                qs = getattr(qs, context_paginated_name)
-                qs = qs.all()
-            except:
-                pass
+        qs = self.get_content_object(context)
         self.add_paginator(context, qs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if self.paginate_by:
+        if self.paginate_by and not isinstance(self, MultipleObjectMixin):  # generic.ListView has pagination built in
             self.paginate(context)
         return context
 
 
-class AjaxableResponseMixin(object):
+class AjaxableResponseMixin(ViewMixin):
     """Easily add Ajax support to a view.
 
     Using the GET method (ListView, DetailView):
@@ -341,3 +386,39 @@ class AjaxableResponseMixin(object):
         else:
             return response
     # ========== END POST Method ==========
+
+
+class FilterMixin(ViewMixin):
+    """Support for django-filter"""
+    filter_class = None
+    context_filter_name = 'filter'
+
+    def __init__(self, *args, **kwargs):
+        self.filter = None
+        super().__init__(*args, **kwargs)
+
+    def filter_qs(self, qs):
+        filt = self.filter_class(self.request.GET, queryset=qs)
+        return filt, filt.qs
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if isinstance(self, MultipleObjectMixin):
+            if self.filter_class:
+                self.filter, qs = self.filter_qs(qs)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.filter_class and not isinstance(self, MultipleObjectMixin):  # generic.ListView uses get_queryset
+            qs = self.get_content_object(context)
+            self.filter, qs = self.filter_qs(qs)
+            context[self.context_filter_name] = self.filter
+            self.set_content_object(context, qs)
+
+        return context
+
+
+class AjaxTableMixin(AjaxableResponseMixin, PaginatorMixin, SortableTableMixin, FilterMixin):
+    """View mixin that has Ajax with sorting and pagination"""
+    pass

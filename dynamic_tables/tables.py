@@ -29,7 +29,7 @@ def get_all_model_fields(model):
 
 
 class Column(dict):
-    def __init__(self, name, display_name=None, sort=None, tag=None):
+    def __init__(self, name, display_name=None, sort=None, tag=None, class_names="", style=""):
         d, li = None, None
         if isinstance(name, dict):
             d = name
@@ -39,7 +39,7 @@ class Column(dict):
             li = name
             name = None
 
-        super().__init__(name=name, display_name=display_name, sort=sort, tag=tag)
+        super().__init__(name=name, display_name=display_name, sort=sort, tag=tag, class_names=class_names, style=style)
 
         if d is not None:
             self.from_dict(d)
@@ -53,47 +53,34 @@ class Column(dict):
 
     def from_dict(self, d):
         """Set the values from a dictionary"""
-        try:
-            self["display_name"] = d["display_name"]
-        except KeyError:
-            pass
-        try:
-            self["sort"] = d["sort"]
-        except KeyError:
-            pass
-        try:
-            self["tag"] = d["tag"]
-        except KeyError:
-            pass
-        try:
-            self["name"] = d["name"]
-        except KeyError:
-            dsp = self["display_name"]
-            if dsp:
-                self["name"] = dsp.replace(" ", "_").lower()
+        self.update(d)
+
+        name = self["name"]
+        if self["display_name"] is None and name is not None:
+            self["display_name"] = str(name).replace("_", " ").title()
+        if self['sort'] is None and name is not None:
+            self['sort'] = str(name)
 
     def from_list(self, li):
         length = len(li)
-        name, d, s, t = None, None, None, None
+        if length > 0:
+            self.name = li[0]
+        if length > 1:
+            self.display_name = li[1]
+        if length > 2:
+            self.sort = li[2]
+        if length > 3:
+            self.tag = li[3]
         if length > 4:
-            name, d, s, t, _ = li
-        elif length == 4:
-            name, d, s, t = li
-        elif length == 3:
-            name, d, s = li
-        elif length == 2:
-            name, d = li
-        else:
-            name = li[0]
+            self.class_names = li[4]
+        if length > 5:
+            self.style = li[5]
 
-        if d is not None:
-            self["display_name"] = d
-        if s is not None:
-            self["sort"] = s
-        if t is not None:
-            self["tag"] = t
-        if name is not None:
-            self["name"] = name
+        name = self["name"]
+        if self["display_name"] is None and name is not None:
+            self["display_name"] = str(name).replace("_", " ").title()
+        if self['sort'] is None and name is not None:
+            self['sort'] = str(name)
 
     @property
     def name(self):
@@ -151,11 +138,29 @@ class Column(dict):
                     value = obj
                 else:
                     value = cell
+                if value is None:
+                    value = ""
                 tag = tag.replace("{{" + val + "}}", str(value))
             except:
                 tag = tag.replace("{{" + val + "}}", "")
 
         return tag
+
+    @property
+    def class_names(self):
+        return self["class_names"]
+
+    @class_names.setter
+    def class_names(self, class_names):
+        self["class_names"] = class_names
+
+    @property
+    def style(self):
+        return self["style"]
+
+    @style.setter
+    def style(self, style):
+        self["style"] = style
 
 
 class TableOptions(object):
@@ -167,7 +172,9 @@ class TableOptions(object):
 
         self.table_id = getattr(options, 'table_id', "dynamic_table")
         self.table_class_names = getattr(options, 'table_class_names', "")
+        self.table_style = getattr(options, 'table_style', "")
         self.row_class_names = getattr(options, 'row_class_names', "")
+        self.row_style = getattr(options, 'row_style', "")
 
 
 class TableMetaclass(type):
@@ -201,8 +208,16 @@ class BaseTable(object):
         return self._meta.table_class_names
 
     @property
+    def table_style(self):
+        return self._meta.table_style
+
+    @property
     def row_class_names(self):
         return self._meta.row_class_names
+
+    @property
+    def row_style(self):
+        return self._meta.row_style
 
     @property
     def headers(self):

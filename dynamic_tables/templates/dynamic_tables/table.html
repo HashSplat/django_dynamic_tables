@@ -1,20 +1,20 @@
 {% load dynamic_tables %}
 
 
-<table id="{{ table.table_id }}" class="{{ table.table_class_names }}">
+<table id="{{ table.table_id }}" class="{{ table.table_class_names }}" style="{{ table.table_style }}">
     <thead>
         <tr>
     {% for col in table.columns %}
         {% if table.sortable and col.sort %}
             {% if col.sort in table.ordering %}
-                <th><a href="?sort=-{{ col.sort }}">{{ col.display_name }} ▴</a></th>
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort=-{{ col.sort }}">{{ col.display_name }} ▴</a></th>
             {% elif "-"|add:col.sort in table.ordering %}
-                <th><a href="?sort={{ col.sort }}">{{ col.display_name }} ▾</a></th>
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort={{ col.sort }}">{{ col.display_name }} ▾</a></th>
             {% else %}
-                <th><a href="?sort={{ col.sort }}">{{ col.display_name }}</a></th>
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort={{ col.sort }}">{{ col.display_name }}</a></th>
             {% endif %}
         {% else %}
-            <th>{{ col.display_name }}</th>
+            <th class="{{ col.class_names }}" style="{{ col.style }}">{{ col.display_name }}</th>
         {% endif %}
     {% endfor %}
         </tr>
@@ -22,7 +22,7 @@
 
     <tbody>
     {% for row in table.queryset %}
-        <tr class="{{ table.row_class_names }}">
+        <tr class="{{ table.row_class_names }}" style="{{ table.row_style }}">
         {% for col in table.columns %}
             <td>{% render_table_cell table row col %}</td>
         {% endfor %}
