@@ -1,49 +1,42 @@
+{% load static %}
 {% load dynamic_tables %}
+
 
 {% if is_paginated %}
     {% render_load_more_btn %}
+
+
+    <script type="text/javascript" src="{% static 'dynamic_tables/parse_tag.js' %}" ></script>
 
 
     <script>
         // Function to create a table row
         function create_table_row(item){
             var tds = '';
-            var td = '';
-
+            var td;
 {% for col in table.columns %}
     {% if col.tag %}
-            // Parse the tag text
-            td = "<td>{{ col.safe_tag }}</td>";
-
-            // replace item.name with actual item properties
-            for(var val in item) {
-                td = td.replace("item."+val, item[val]);
-            }
-            // Replace item and cell values
-            td = td.replace("item", item["str"]).replace("cell", item['{{ col.name }}']);
-            tds += td; // Add to items in the row
-            console.log(td);
-
+            td = parse_tag("{{ col.safe_tag }}", item);
+            td = td.replaceAll("{"+"{item}"+"}", item["str"]);
+            td = td.replaceAll("{"+"{cell}"+"}", item['{{ col.name }}']);
+            td = td.replaceAll("{"+"{row_idx}"+"}", item['row_idx']);
     {% else %}
             if(typeof item['{{ col.name }}'] !== "undefined" ){
                 td = "<td>" + item['{{ col.name }}'] + "</td>";
-            } else{
+            } else {
                 td = "<td></td>";
             }
-
-            tds += td; // Add to items in the row
-
     {% endif %}
+            tds += td; // Add to items in the row
 {% endfor %}
             return '<tr class="{{ table.row_class_names }}" style="{{ table.row_style }}">' + tds + '</tr>';
         }
 
 
         $(document).ready(function() {
-{% if page_sorting %}
-            var base_url = "?sort={{ page_sorting }}&page=";
-{% else %}
-            var base_url = "?page=";
+            var base_page_url = "?page=";
+{% if base_page_url %}
+            base_page_url = "{{ base_page_url }}";
 {% endif %}
             var page = {{ page_obj.number }} + 1;
             var total = {% if page_obj.paginator.num_pages %}{{ page_obj.paginator.num_pages }}{% else %}0{% endif %};
@@ -76,13 +69,13 @@
 
                 $.ajax({
                     type: "get",
-                    url: base_url + page.toString(),
+                    url: base_page_url + page.toString(),
                     dataType: "json",
                     success: function (json) {
                         load_more_data(json);
 
                         page = page + 1;
-                        if(page >= total){
+                        if(page >= total + 1){
                             $("#load_more_btn")[0].style.display = "none";
                         }
                     },

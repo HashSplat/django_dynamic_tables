@@ -1,9 +1,9 @@
 from django.utils.safestring import mark_safe
 
-from .base import register
+from .base import register, get_url_modifiers
 
 
-__all__ = ["render_load_more"]
+__all__ = ["render_load_more", 'render_load_more_btn', 'render_parse_tag']
 
 
 @register.inclusion_tag("dynamic_tables/load_more.html", takes_context=True)
@@ -14,10 +14,8 @@ def render_load_more(context):
 
     Uses pagination in order to work.
     """
-    try:
-        context["page_sorting"] = context["request"].GET.get("sort")
-    except KeyError:
-        pass
+    # Sorting and Filtering support
+    context = get_url_modifiers(context)
 
     return context
 
@@ -26,3 +24,9 @@ def render_load_more(context):
 def render_load_more_btn(context):
     """Render a load more data button (only render the button)."""
     return context
+
+
+@register.inclusion_tag("dynamic_tables/parse_tag.html")
+def render_parse_tag():
+    """Render a load more data button (only render the button)."""
+    return {}  # No context, only javascript

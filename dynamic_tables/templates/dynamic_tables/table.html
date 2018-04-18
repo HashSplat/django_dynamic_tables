@@ -5,13 +5,13 @@
     <thead>
         <tr>
     {% for col in table.columns %}
-        {% if table.sortable and col.sort %}
-            {% if col.sort in table.ordering %}
-                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort=-{{ col.sort }}">{{ col.display_name }} ▴</a></th>
-            {% elif "-"|add:col.sort in table.ordering %}
-                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort={{ col.sort }}">{{ col.display_name }} ▾</a></th>
+        {% if table.sortable and col.order_by %}
+            {% if "-"|add:col.order_by in table.ordering %}
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="{{ base_order_by_url }}{{ col.order_by }}">{{ col.display_name }} ▾</a></th>
+            {% elif col.order_by in table.ordering %}
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="{{ base_order_by_url }}-{{ col.order_by }}">{{ col.display_name }} ▴</a></th>
             {% else %}
-                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="?sort={{ col.sort }}">{{ col.display_name }}</a></th>
+                <th class="{{ col.class_names }}" style="{{ col.style }}"><a href="{{ base_order_by_url }}{{ col.order_by }}">{{ col.display_name }}</a></th>
             {% endif %}
         {% else %}
             <th class="{{ col.class_names }}" style="{{ col.style }}">{{ col.display_name }}</th>
@@ -21,10 +21,11 @@
     </thead>
 
     <tbody>
+
     {% for row in table.queryset %}
         <tr class="{{ table.row_class_names }}" style="{{ table.row_style }}">
         {% for col in table.columns %}
-            <td>{% render_table_cell table row col %}</td>
+            <td>{% render_table_cell table row col row_idx=forloop.parentloop.counter0 %}</td>
         {% endfor %}
         </tr>
     {% endfor %}

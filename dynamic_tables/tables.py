@@ -1,7 +1,10 @@
+import copy
 import re
 
 import django
 from django.db import models
+from django.db.models import QuerySet
+from django.db.models.functions import Lower, Upper
 from django.utils import six
 from django.utils.safestring import mark_safe
 
@@ -29,7 +32,7 @@ def get_all_model_fields(model):
 
 
 class Column(dict):
-    def __init__(self, name, display_name=None, sort=None, tag=None, class_names="", style=""):
+    def __init__(self, name, display_name=None, order_by=None, tag=None, class_names="", style="", annotate=None):
         d, li = None, None
         if isinstance(name, dict):
             d = name
@@ -39,7 +42,8 @@ class Column(dict):
             li = name
             name = None
 
-        super().__init__(name=name, display_name=display_name, sort=sort, tag=tag, class_names=class_names, style=style)
+        super().__init__(name=name, display_name=display_name, order_by=order_by, tag=tag, class_names=class_names, style=style,
+                         annotate=annotate)
 
         if d is not None:
             self.from_dict(d)
@@ -48,8 +52,8 @@ class Column(dict):
 
         if self["display_name"] is None:
             self["display_name"] = str(self['name']).replace("_", " ").title()
-        if self['sort'] is None:
-            self['sort'] = str(self['name'])
+        if self['order_by'] is None:
+            self['order_by'] = str(self['name'])
 
     def from_dict(self, d):
         """Set the values from a dictionary"""
@@ -58,8 +62,8 @@ class Column(dict):
         name = self["name"]
         if self["display_name"] is None and name is not None:
             self["display_name"] = str(name).replace("_", " ").title()
-        if self['sort'] is None and name is not None:
-            self['sort'] = str(name)
+        if self['order_by'] is None and name is not None:
+            self['order_by'] = str(name)
 
     def from_list(self, li):
         length = len(li)
@@ -68,7 +72,7 @@ class Column(dict):
         if length > 1:
             self.display_name = li[1]
         if length > 2:
-            self.sort = li[2]
+            self.order_by = li[2]
         if length > 3:
             self.tag = li[3]
         if length > 4:
@@ -79,88 +83,98 @@ class Column(dict):
         name = self["name"]
         if self["display_name"] is None and name is not None:
             self["display_name"] = str(name).replace("_", " ").title()
-        if self['sort'] is None and name is not None:
-            self['sort'] = str(name)
-
-    @property
-    def name(self):
-        return self["name"]
-
-    @name.setter
-    def name(self, name):
-        self["name"] = name
-
-    @property
-    def display_name(self):
-        return self["display_name"]
-
-    @display_name.setter
-    def display_name(self, name):
-        self["display_name"] = name
-
-    @property
-    def sort(self):
-        return self["sort"]
-
-    @sort.setter
-    def sort(self, sort):
-        self["sort"] = sort
-
-    @property
-    def tag(self):
-        return self["tag"]
-
-    @tag.setter
-    def tag(self, tag):
-        self["tag"] = tag
+        if self['order_by'] is None and name is not None:
+            self['order_by'] = str(name)
 
     def safe_tag(self):
         """Return the tag without django braces and as a safe html string."""
-        return mark_safe(self.tag.replace("{{ ", "").replace(" }}", "").replace("{{", "").replace("}}", ""))
+        return mark_safe(self.tag.replace("{{ ", "{{").replace(" }}", "}}").replace('"', '\\"').replace("'", "\\'"))
 
-    def parse_tag(self, obj, cell):
+    def parse_tag(self, obj, cell, row_idx=None):
         """Parse a custom tag.
 
         Args:
              obj (object): Data object to render
              cell (str): object column value
+             row_idx (int)[None]: Row index.
         """
         tag = self.tag.replace("{{ ", "{{").replace(" }}", "}}")
 
         replace_vals = re.findall(r"\{([^{}]+)\}", tag)
         for val in replace_vals:
+            if val == "endif" or val == "else":
+                continue
+
+            # Check for if condition
+            is_if_cond = False
+            if val.startswith("if "):
+                is_if_cond = True
+                val = val[3:]
+
+            # Get the value
             try:
                 if val.startswith('item.'):
-                    value = getattr(obj, val[5:])
+                    if isinstance(obj, dict) and val[5:] in obj:
+                        value = obj[val[5:]]
+                    else:
+                        value = getattr(obj, val[5:])
                     if callable(value):
                         value = value()
                 elif val == "item":
                     value = obj
+                elif val == "row_idx":
+                    value = row_idx
                 else:
                     value = cell
                 if value is None:
                     value = ""
-                tag = tag.replace("{{" + val + "}}", str(value))
             except:
-                tag = tag.replace("{{" + val + "}}", "")
+                value = ""
+
+            # Check if
+            if is_if_cond:
+                # Get the if condition positions
+                start = tag.index("{{if "+val+"}}")
+                end = tag.index("{{endif}}") + 9
+                try:
+                    else_idx = tag.index("{{else}}")
+                except ValueError:
+                    # The else condition was not found
+                    else_idx = float("inf")
+
+                if value:
+                    if else_idx < end:
+                        # Remove else part and remove the if condition
+                        tag = tag[: else_idx] + tag[end:]
+                        tag = tag.replace("{{if "+val+"}}", "", 1)
+                    else:
+                        # Remove the if condition (No else statement)
+                        tag = tag.replace("{{if "+val+"}}", "", 1).replace("{{endif}}", "", 1)
+                else:
+                    if else_idx < end:
+                        # Keep else part and remove if condition part
+                        tag = tag[: start] + tag[else_idx + 8:]
+                        tag = tag.replace("{{endif}}", "", 1)
+                    else:
+                        # Remove the entire if block without the value
+                        tag = tag[:start] + tag[end:]
+
+            # Set the value
+            tag = tag.replace("{{" + val + "}}", str(value))
 
         return tag
 
-    @property
-    def class_names(self):
-        return self["class_names"]
+    def __setattr__(self, key, value):
+        self[key] = value
 
-    @class_names.setter
-    def class_names(self, class_names):
-        self["class_names"] = class_names
+    def __dir__(self):
+        return self.keys()
 
-    @property
-    def style(self):
-        return self["style"]
-
-    @style.setter
-    def style(self, style):
-        self["style"] = style
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key)
 
 
 class TableOptions(object):
@@ -169,6 +183,7 @@ class TableOptions(object):
         self.fields = getattr(options, 'fields', None)
         self.exclude = getattr(options, 'exclude', None)
         self.sortable = getattr(options, 'sortable', True)
+        self.annotations = getattr(options, "annotations", {})
 
         self.table_id = getattr(options, 'table_id', "dynamic_table")
         self.table_class_names = getattr(options, 'table_class_names', "")
@@ -182,18 +197,93 @@ class TableMetaclass(type):
         new_class = super(TableMetaclass, cls).__new__(cls, name, bases, attrs)
         new_class._meta = TableOptions(getattr(new_class, "Meta", None))
         new_class.base_columns = new_class.get_columns()
+        new_class.annotations = copy.deepcopy(new_class._meta.annotations)
 
         return new_class
 
 
 class BaseTable(object):
 
-    def __init__(self, queryset=None, ordering=None):
-        self.queryset = queryset
-        self.ordering = ordering
+    order_by_name = "order_by"
+
+    def __init__(self, queryset=None, order_by=None, parent=None):
         if not hasattr(self, "base_columns"):
             self.base_columns = []
+        if not hasattr(self, "annotations"):
+            self.annotations = {}
         self.columns = [d for d in self.base_columns]
+        self.queryset = queryset
+        self.order_by = None
+        self.ordering = None
+        self.set_ordering(order_by)
+
+        self.queryset = self.get_queryset(queryset, parent=parent)
+
+    def get_queryset(self, queryset, parent=None):
+        """Take the original queryset and the possible parent object and return the queryset to be used."""
+        return self.sort(self.annotate(queryset, parent=parent), parent=parent)
+
+    def annotate(self, qs, parent=None):
+        """Annotate the queryset from the column annotations."""
+        annotate = copy.deepcopy(self.annotations)
+        for col in self.columns:
+            if col.annotate:
+                if callable(col.annotate):
+                    qs = col.annotate(col.name, qs, parent)
+                else:
+                    annotate[col.name] = col.annotate
+
+        if len(annotate) == 0:
+            return qs
+        return qs.annotate(**annotate)
+
+    def sort(self, qs, parent=None):
+        """Sort the queryset."""
+        if self.sortable and self.ordering:
+            return qs.order_by(*self.order_by)
+        return qs
+
+    def set_ordering(self, order_by):
+        self.ordering = order_by
+        if order_by:
+            self.order_by = self.get_ordering(order_by)
+
+    @classmethod
+    def get_ordering(cls, order_by):
+        return tuple(cls._get_special_ordering(o) for o in order_by.split(','))
+
+    @classmethod
+    def _get_special_ordering(cls, sort_name):
+        model = cls._meta.model
+        col = sort_name
+
+        # Check for a negative
+        negative = False
+        if col.startswith("-"):
+            negative = True
+            col = col[1:]
+
+        # Get the field
+        try:
+            # Iterate over relations to get the field type
+            sub_col = col
+            while "__" in sub_col:
+                sub_name, sub_col = sub_col.split("__", 1)
+                sub = model._meta.get_field(sub_name)
+                model = sub.target_field.model
+
+            field = model._meta.get_field(sub_col)
+        except:
+            return sort_name
+
+        # Check if some sort of text field (Do not do this for number field)
+        if isinstance(field, (models.CharField, models.TextField, models.EmailField,
+                              models.FileField, models.FilePathField, models.SlugField, models.URLField,
+                              models.UUIDField, models.GenericIPAddressField)):
+            if negative:
+                return Upper(col).desc()
+            return Upper(col)
+        return sort_name
 
     @property
     def sortable(self):
@@ -265,23 +355,27 @@ class BaseTable(object):
 
         return fields
 
-    def render(self, obj, col):
+    def render(self, obj, col, row_idx=None):
         """Return the template html text for the row and column
 
         Args:
              obj (object): Data object to render
              col (Column): Column dictionary
+             row_idx (int)[None]: Row index.
         """
-        cell = getattr(obj, col.name, "")
+        if isinstance(obj, dict):
+            cell = obj.get(col.name, "")
+        else:
+            cell = getattr(obj, col.name, "")
         if callable(cell):
             cell = cell()
 
         # Tag for ajax compatibility
         if col.tag:
-            return mark_safe(col.parse_tag(obj, cell))
+            return mark_safe(col.parse_tag(obj, cell, row_idx=row_idx))
 
         elif hasattr(self, "render_"+col.name):
-            return mark_safe(getattr(self, "render_"+col.name)(obj, cell))
+            return mark_safe(getattr(self, "render_"+col.name)(obj, cell, row_idx=row_idx))
         else:
             return mark_safe(str(cell))
 
